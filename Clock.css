@@ -1,0 +1,42 @@
+/**
+ * import external fonts files
+ */
+@font-face {
+    font-family: LiquidCrystal;
+    font-style: normal;
+    src: url('fonts/LiquidCrystal-Normal.otf');
+}
+@font-face {
+    font-family: LiquidCrystal-Light;
+    font-style: normal;
+    src: url('fonts/LiquidCrystal-Light.otf');
+}
+
+body {
+	margin:0px;
+	overflow-x: hidden;
+	overflow-y: hidden;
+}
+
+.ClockText {
+    font-family: LiquidCrystal;
+    font-size: 50px;
+    max-font-size: 100dppx;
+    min-font-size: 30dppx;
+    color: aqua;
+    z-index: 1;
+    position: absolute;
+    top: 5%;
+    left: 5%;
+}
+
+.ClockCanvas {
+    margin-right: 0px;
+    background-color: black;
+    z-index: 0;
+}
+
+.CanvasSupport {
+    font-size: 80%;
+    color: red;
+}

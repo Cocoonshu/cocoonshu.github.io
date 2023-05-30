@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title>Clock</title>
+    <link rel="stylesheet" type="text/css" href="Clock.css" />
+    <script src="Clock.js" type="application/javascript" ></script>
+</head>
+<body onload="startClock('ClockCanvas'); setLogView('LogLabel');"
+      onunload="stopClock()" onresize="onCanvasResize()" >
+    <canvas id="ClockCanvas" class="ClockCanvas">浏览器不支持Html5!</canvas>
+    <label id="CanvasSupport" class="CanvasSupport"></label>
+    <label id="LogLabel"></label>
+</body>
+</html>
