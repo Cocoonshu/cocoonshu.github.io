@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Roulette</title>
+    <link href="../bootstrap/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="Roulette.css" />
+    <script src="Roulette.js" type="application/javascript" ></script>
+    <script id="shader-vs" type="x-shader/x-vertex">
+        precision highp float;
+        precision highp sampler2D;
+
+        attribute vec3 aPos;
+        attribute vec2 aUv;
+        attribute vec3 aNormal;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        uniform float uScale;
+        uniform float uRatio;
+
+        vec4 reshapePosition(vec3 pos, float ratio, float scale) {
+            vec4 position = vec4(pos * scale, 1.0);
+            if (ratio > 1.0) {
+                position.x /= ratio;
+            } else {
+                position.y *= ratio;
+            }
+            return position;
+        }
+
+        void main() {
+            gl_Position = reshapePosition(aPos, uRatio, uScale);
+            vUv = vec2(1.0 - aUv.x, 1.0 - aUv.y);
+            vNormal = aNormal;
+        }
+    </script>
+    <script id="shader-fs" type="x-shader/x-fragment">
+        precision highp float;
+        precision highp sampler2D;
+
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        uniform sampler2D uDiffuse;
+        uniform mat4 uMvp;
+        uniform float uUnitTime;
+
+        const float moveDistance = 0.1;
+        const float rotateAcceleration = 2000.0;
+        const vec4 discBackgroundColor = vec4(0.1);
+
+        float curve(float x, float curvature) {
+            //                       1
+            // algo: sigmod = ---------------
+            //                 1 + (c ^ -x)
+            // input: [-1, 1] -> [-1, 1]
+            // output: [-1, 1] -> (-1, 1)
+            return 1.0 / (1.0 + pow(curvature, -x));
+        }
+
+        void main() {
+            float uvOffset = curve(sin(uUnitTime), rotateAcceleration) * moveDistance;
+            vec2 samplePosition = vec2(vUv.x + uvOffset, vUv.y);
+            vec4 pixelColor = texture2D(uDiffuse, samplePosition) + discBackgroundColor;
+            gl_FragColor = vec4(vUv.t) * pixelColor;
+        }
+    </script>
+</head>
+<body onload="startClock('ClockCanvas'); setLogView('LogLabel');"
+      onunload="stopClock()"
+      onresize="onCanvasResize()">
+
+    <div style="position: absolute; z-index: 1"><!-- 画布 -->
+        <canvas id="ClockCanvas" class="ClockCanvas">浏览器不支持Html5!</canvas>
+        <label id="CanvasSupport" class="CanvasSupport"></label>
+        <label id="LogLabel"></label>
+    </div>
+    <div style="position: absolute; z-index: 2; margin: 10px; width: 300px"><!-- 菜单 -->
+        <ol class="breadcrumb"><!-- 导航 -->
+            <li><a href="#">Home</a></li>
+            <li><a href="#">WebGL</a></li>
+            <li class="active">Roulette</li>
+        </ol>
+        <div class="panel panel-default" style="background-color: #f5f5f5A1"><!-- 菜单面板 -->
+            <div class="panel-heading" style="opacity: 1.0">
+                <h4 class="panel-title">
+                    <a data-toggle="collapse" data-parent="#accordion" href="#menu">渲染选项</a><!-- 面板折叠按钮 -->
+                </h4>
+            </div>
+            <div id="menu" class="panel-collapse collapse">
+                <div class="panel-body">
+                    <ul class="list-group">
+                        <li class="list-group-item">
+                            <span>圆盘细分：<span id="txtDivide"></span></span>
+                            <input id="skrDivide" class="seekbar" type="range" min="8" max="128" value="64" oninput="notifyDivideChanged(this.value)"/>
+                        </li>
+                        <li class="list-group-item">
+                            <span>声明文字：</span>
+                            <input id="edtComment" class="edittext" type="text" oninput="notifyCommentChanged(this.value)" disabled/>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 先加载内容，最后再加载菜单 -->
+    <script src="../bootstrap/jquery.min.js"></script>
+    <script src="../bootstrap/bootstrap.min.js"></script>
+    <script>
+        function notifyDivideChanged(divide) {
+            setRenderingArguments("modelDivideAccuracy", divide)
+            txtDivide.innerText = divide
+        }
+
+        function notifyCommentChanged(comment) {
+            setRenderingArguments("modelComment", comment)
+        }
+
+        txtDivide.innerText = renderingArgs.modelDivideAccuracy
+        skrDivide.value = renderingArgs.modelDivideAccuracy
+    </script>
+</body>
+</html>
