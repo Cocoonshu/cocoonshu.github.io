@@ -1,5 +1,4 @@
 ////////////////// 带入私有库 ///////////////////
-document.write("<script src='ImageGenerator.js'></script>");
 document.write("<script src='RouletteRenderer.js'></script>");
 
 ////////////////// 公开方法 ///////////////////
@@ -49,6 +48,19 @@ let references = {
 function startClock(canvasElementId) {
     references.canvas = document.getElementById(canvasElementId);
     references.timer = setInterval(onTimeIntervalChanged, 500);
+
+    waitingFontLoadEvent(
+        new FontFace("LiquidCrystal", "url('fonts/LiquidCrystal-Normal.otf')"),
+        (isLoaded) => {
+            resources.outer.isDirty = true;
+            resources.middle.isDirty = true;
+            resources.inner.isDirty = true;
+            if (!isLoaded) {
+                console.log('Font not loaded');
+            }
+        }
+    );
+
     initializeClockCanvas();
     extractShaderSourceFromScript();
     onCanvasCreated(references.canvasContext);
@@ -119,6 +131,14 @@ Date.prototype.format = function dateFormat(fmt) {
     return fmt;
 };
 
+async function waitingFontLoadEvent(font, callback) {
+    await font.load().then(() => {
+        callback(true);
+    }).catch(() => {
+        callback(false);
+    });
+}
+
 function initializeClockCanvas() {
     try {
         references.canvasContext = references.canvas.getContext("webgl2", { alpha: true, antialias: true});
@@ -133,54 +153,79 @@ function extractShaderSourceFromScript() {
     setMaterial("fragmentShader", shaderSourceFromScript("shader-fs"));
 }
 
-function makeResourcesIfNeed(currentCanvasWidth, currentCanvasHeight) {
+async function makeResourcesIfNeed(currentCanvasWidth, currentCanvasHeight) {
     let dimensionIsDirty = (resources.forDimension.width !== currentCanvasWidth)
                         || (resources.forDimension.height !== currentCanvasHeight);
+    resources.forDimension.width = currentCanvasWidth;
+    resources.forDimension.height = currentCanvasHeight;
 
     if (dimensionIsDirty || resources.outer.isDirty) {
         resources.outer.isDirty = false
-        resources.outer.taskId = resources.taskIdCounter++;
-        ensureResourceMaker().postMessage({
-            method: "genTextImage",
-            taskId: resources.outer.taskId,
-            boundWidth: currentCanvasWidth,
-            boundHeight: currentCanvasHeight,
-            text: makeDateText(),
-            textColor: "#DE592C",
-            textSize: "60px"
-        })
+        let image = await makeAsyncTextImage(
+            currentCanvasWidth,
+            currentCanvasHeight,
+            makeDateText(),
+            "#DE592C",
+            "60px"
+        );
+        setMaterial("outerTexture", image);
     }
 
     if (dimensionIsDirty || resources.middle.isDirty) {
         resources.middle.isDirty = false;
-        resources.middle.taskId = resources.taskIdCounter++;
-        ensureResourceMaker().postMessage({
-            method: "genTextImage",
-            taskId: resources.middle.taskId,
-            boundWidth: currentCanvasWidth,
-            boundHeight: currentCanvasHeight,
-            text: makeCommentText(),
-            textColor: "#FFFFFF",
-            textSize: "80px"
-        })
+        let image = await makeAsyncTextImage(
+            currentCanvasWidth,
+            currentCanvasHeight,
+            makeCommentText(),
+            "#FFFFFF",
+            "80px"
+        );
+        setMaterial("middleTexture", image);
     }
 
     if (dimensionIsDirty || resources.inner.isDirty) {
         resources.inner.isDirty = false;
-        resources.inner.taskId = resources.taskIdCounter++;
-        ensureResourceMaker().postMessage({
-            method: "genTextImage",
-            taskId: resources.inner.taskId,
-            boundWidth: currentCanvasWidth,
-            boundHeight: currentCanvasHeight,
-            text: makeTimeText(),
-            textColor: "#DE592C",
-            textSize: "80px"
-        })
+        let image = await makeAsyncTextImage(
+            currentCanvasWidth,
+            currentCanvasHeight,
+            makeTimeText(),
+            "#DE592C",
+            "80px"
+        );
+        setMaterial("innerTexture", image);
+    }
+}
+
+function makeAsyncTextImage(boundWidth, boundHeight, text, textColor, textSize) {
+    let fontSize = textSize;
+    let fontColor = textColor;
+    let padding = 5;
+    let canvas = new OffscreenCanvas(0, 0);
+
+    let metrics = null;
+    {// measure
+        let context = canvas.getContext("2d", { alpha: true, antialias: true});
+        context.font = fontSize + " LiquidCrystal";
+        context.textAlign = "left";
+        context.fillStyle = fontColor;
+        context.textBaseline = "top";
+        metrics = context.measureText(text);
     }
 
-    resources.forDimension.width = currentCanvasWidth;
-    resources.forDimension.height = currentCanvasHeight;
+    {// draw text
+        canvas.width = (metrics.actualBoundingBoxRight - metrics.actualBoundingBoxLeft) + padding;
+        canvas.height = (metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) + padding;
+        let context = canvas.getContext("2d", { alpha: true, antialias: true});
+        context.font = fontSize + " LiquidCrystal";
+        context.textAlign = "left";
+        context.fillStyle = fontColor;
+        context.textBaseline = "top";
+        context.fillText(text, 0, 0);
+    }
+
+    let result = canvas.transferToImageBitmap();
+    console.log("[makeTextImage] make " + result.width + "x" + result.height + " image bitmap for '" + text + "'")
+    return result
 }
 
 function onTimeIntervalChanged() {
@@ -190,29 +235,6 @@ function onTimeIntervalChanged() {
         resources.inner.isDirty = true;
         makeResourcesIfNeed(env.canvasWidth, env.canvasHeight); // <---- 缺失对前一次任务的cancel，会偶尔引起更新纹理延迟
     }
-}
-
-function onResourceMakerCallback(event) {
-    console.log("[ensureResourceMaker] task: " + event.data.taskId + ", payload: " + event.data.result);
-    switch (event.data.taskId) {
-        case resources.outer.taskId: setMaterial("outerTexture", event.data.result); break;
-        case resources.middle.taskId: setMaterial("middleTexture", event.data.result); break;
-        case resources.inner.taskId: setMaterial("innerTexture", event.data.result); break;
-    }
-}
-
-function onResourceMakerError(error) {
-
-}
-
-function ensureResourceMaker() {
-    if (resources.resourceMaker == null) {
-        console.log("[ensureResourceMaker] launch ImageGenerator");
-        resources.resourceMaker = new Worker("ImageGenerator.js", { name: "[Roulette] ImageGenerator" })
-        resources.resourceMaker.onmessage = onResourceMakerCallback;
-        resources.resourceMaker.onmessageerror = onResourceMakerError;
-    }
-    return resources.resourceMaker;
 }
 
 function makeDateText() {
